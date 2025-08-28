@@ -240,12 +240,6 @@ def create_identical_map():
     '''))
 
     # 13. SOLUÇÃO DEFINITIVA - Legenda que funciona no Streamlit
-    # Primeiro: Adicionar IDs únicos a todas as camadas para podermos controlá-las
-    
-    # Adicionar IDs únicos aos FeatureGroups
-    for i, tema in enumerate(temas_unicos):
-        feature_groups[tema].layer_name = f"tema_{i}"
-    
     # JavaScript robusto para controle das camadas
     legend_js = '''
     // Variáveis globais para armazenar referências das camadas
@@ -365,7 +359,7 @@ def create_identical_map():
         setTimeout(renameBaseLayer, 2500);
     });
     
-    // Mutation Observer para detectar mudanças dinâmicas
+    // Mutation Observer para detectar mudanças dinámicas
     if (typeof MutationObserver !== 'undefined') {
         const observer = new MutationObserver(function(mutations) {
             let shouldReinitialize = false;
@@ -413,25 +407,21 @@ def create_identical_map():
                 background-color: rgba(255, 255, 255, 0.98); overflow-y: auto; 
                 max-height: 400px; padding: 15px; border-radius: 10px; 
                 box-shadow: 0 6px 20px rgba(0,0,0,0.15); backdrop-filter: blur(5px);">
-        <p style="margin:0; padding-bottom:12px; color: #2c3e50; font-weight: bold; 
-                  font-size: 14px; border-bottom: 2px solid #ecf0f1;">
-            🎨 Legenda de Temas</p>
+        <p style="margin:0; padding-bottom:12px; color: #333333; font-weight: bold; 
+                  font-size: 14px; border-bottom: 2px solid #eeeeee;">
+            Legenda de Temas</p>
         <div style="display: flex; gap: 8px; margin-bottom: 15px;">
             <button onclick="window.toggleAllLayers(true)" 
-                    style="flex: 1; padding: 8px; background: linear-gradient(to bottom, #27ae60, #229954); 
-                           color: white; border: none; border-radius: 6px; cursor: pointer; 
-                           font-weight: 500; font-size: 11px; transition: all 0.2s;"
-                    onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 12px rgba(39, 174, 96, 0.3)';"
-                    onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';">
-                ✅ Selecionar Todas
+                    style="flex: 1; padding: 8px; background-color: #f8f9fa; 
+                           color: #333333; border: 1px solid #dddddd; border-radius: 6px; cursor: pointer; 
+                           font-weight: 500; font-size: 11px;">
+                Selecionar Todas
             </button>
             <button onclick="window.toggleAllLayers(false)" 
-                    style="flex: 1; padding: 8px; background: linear-gradient(to bottom, #e74c3c, #c0392b); 
-                           color: white; border: none; border-radius: 6px; cursor: pointer; 
-                           font-weight: 500; font-size: 11px; transition: all 0.2s;"
-                    onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 12px rgba(231, 76, 60, 0.3)';"
-                    onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';">
-                ❌ Desselecionar
+                    style="flex: 1; padding: 8px; background-color: #f8f9fa;
+                           color: #333333; border: 1px solid #dddddd; border-radius: 6px; cursor: pointer; 
+                           font-weight: 500; font-size: 11px;">
+                Desselecionar
             </button>
         </div>
         <div style="max-height: 300px; overflow-y: auto; padding-right: 5px;">
@@ -445,11 +435,13 @@ def create_identical_map():
                     onmouseout="this.style.background=\'transparent\';" \
                     onclick="window.toggleLayer(\'{tema}\');">'
          f'<i class="fa fa-square" style="color:{colormap[tema]}; font-size: 16px; margin-right: 10px;"></i>'
-         f'<span style="color: #34495e; font-size: 12px; font-weight: 500;">{tema}</span>'
+         f'<span style="color: #333333; font-size: 12px; font-weight: 500;">{tema}</span>'
          f'</div>' 
          for tema in temas_unicos]))
     
     m.get_root().html.add_child(folium.Element(legend_html))
+    
+    return m
 
 # Interface principal do Streamlit
 def main():
@@ -506,6 +498,27 @@ def main():
         padding-bottom: 2rem;
         padding-left: 3rem;
         padding-right: 3rem;
+    }
+    
+    /* Texto em cinza escuro para toda a legenda */
+    .leaflet-control-layers label {
+        color: #333333 !important;
+    }
+    
+    .leaflet-control-layers span {
+        color: #333333 !important;
+    }
+    
+    .leaflet-tooltip {
+        color: #333333 !important;
+    }
+    
+    .leaflet-popup-content {
+        color: #333333 !important;
+    }
+    
+    .leaflet-container {
+        color: #333333 !important;
     }
     </style>
     """, unsafe_allow_html=True)
