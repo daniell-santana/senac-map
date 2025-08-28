@@ -220,31 +220,36 @@ def create_identical_map():
     # Adicionar JavaScript para controle interativo
     m.get_root().html.add_child(folium.Element('''
     <script>
-    // Função para alternar camadas individuals
-    function toggleLayer(tema) {
-        const inputs = document.querySelectorAll('.leaflet-control-layers-list input');
-        inputs.forEach(input => {
-            if (input.nextSibling.textContent.trim() === tema) {
-                input.click();
+    // Função para alternar camadas individuais
+    function toggleLayer(temaNome) {
+        // Encontrar todos os inputs de controle de camadas
+        const layerInputs = document.querySelectorAll('.leaflet-control-layers input');
+        
+        layerInputs.forEach(input => {
+            // Encontrar o label correspondente
+            const label = input.nextElementSibling;
+            if (label && label.textContent.trim() === temaNome) {
+                input.click(); // Clicar no checkbox
             }
         });
     }
-
-    // Função para selecionar/desselecionar todas as camadas
+    
+    // Função para selecionar/desselecionar todas as camadas - CORRIGIDA
     function toggleAllLayers(select) {
-        const inputs = document.querySelectorAll('.leaflet-control-layers-list input');
+        const inputs = document.querySelectorAll('.leaflet-control-layers input');
         inputs.forEach(input => {
-            // Verifica se é uma camada de tema (não inclui a base)
-            if (!input.parentElement.textContent.includes('OpenStreetMap') && 
-                !input.parentElement.textContent.includes('Camada Municípios') &&
-                !input.parentElement.textcontent.includes('Camada Município 2')) {
+            // Verificar apenas camadas de tema (não inclui base)
+            const labelText = input.nextElementSibling.textContent;
+            if (!labelText.includes('OpenStreetMap') && 
+                !labelText.includes('Camada Municípios') &&
+                !labelText.includes('Camada Município 2')) {
                 if (input.checked !== select) {
                     input.click();
                 }
             }
         });
     }
-
+    
     // Renomear a camada base
     document.addEventListener('DOMContentLoaded', function() {
         setTimeout(function() {
@@ -254,7 +259,7 @@ def create_identical_map():
                     layer.textContent = 'Controle de Camadas';
                 }
             });
-        }, 500);
+        }, 1000);
     });
     </script>
     '''))
@@ -269,23 +274,53 @@ def main():
     with st.spinner('Carregando mapa interativo...'):
         mapa = create_identical_map()
         
-        # Usar st_folium para exibir o mapa com altura responsiva
+        # Usar st_folium para exibir o mapa centralizado e responsivo
         st_folium(mapa, width=None, height=700, returned_objects=[])
 
-    # CSS para tornar o mapa responsivo
+    # CSS para centralizar e tornar o mapa totalmente responsivo
     st.markdown("""
     <style>
-    /* Tornar o mapa responsivo */
+    /* Container principal do mapa - CENTRALIZADO */
     .stFolium {
-        width: 100% !important;
+        width: 95% !important;
+        margin: 0 auto !important;
         height: 75vh !important;
+        display: flex !important;
+        justify-content: center !important;
+    }
+    
+    /* Folium iframe dentro do container */
+    .stFolium iframe {
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 10px !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
     }
     
     /* Ajustar para dispositivos móveis */
     @media (max-width: 768px) {
         .stFolium {
-            height: 60vh !important;
+            width: 100% !important;
+            height: 65vh !important;
+            margin: 0 !important;
+            padding: 0 5px !important;
         }
+    }
+    
+    /* Ajustar para telas muito grandes */
+    @media (min-width: 1600px) {
+        .stFolium {
+            width: 85% !important;
+            height: 80vh !important;
+        }
+    }
+    
+    /* Garantir que o streamlit não adicione margens extras */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        padding-left: 3rem;
+        padding-right: 3rem;
     }
     </style>
     """, unsafe_allow_html=True)
