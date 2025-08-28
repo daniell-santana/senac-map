@@ -202,56 +202,94 @@ def create_identical_map():
     legend_html = '''
     <div style="position: fixed; 
                 bottom: 50px; left: 50px; width: 300px; height: auto;
-                border:2px solid grey; z-index:9999; font-size:12px;
-                background-color:white; overflow-y: auto; max-height: 300px;
-                padding: 10px;">
-        <p style="margin:0; padding-bottom:5px;"><strong>Legenda de Temas</strong></p>
-        <button onclick="toggleAllLayers(true)" style="margin-bottom:5px; width:100%;">Selecionar Todas</button>
-        <button onclick="toggleAllLayers(false)" style="margin-bottom:5px; width:100%;">Desselecionar Todas</button>
+                border: 2px solid #cccccc; z-index: 9999; font-size: 12px;
+                background-color: white; overflow-y: auto; max-height: 300px;
+                padding: 10px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+        <p style="margin:0; padding-bottom:8px; color: #333333; font-weight: bold; border-bottom: 1px solid #eeeeee;">
+            Legenda de Temas</p>
+        <button onclick="window.toggleAllLayers(true)" style="margin-bottom:8px; width:100%; padding:6px; 
+                background-color: #f8f9fa; color: #333333; border: 1px solid #dddddd; border-radius:4px; 
+                cursor: pointer; font-size:11px;">Selecionar Todas</button>
+        <button onclick="window.toggleAllLayers(false)" style="margin-bottom:12px; width:100%; padding:6px;
+                background-color: #f8f9fa; color: #333333; border: 1px solid #dddddd; border-radius:4px;
+                cursor: pointer; font-size:11px;">Desselecionar Todas</button>
         {items}
     </div>
     '''.format(items=''.join(
-        [f'<p style="margin:2px; cursor:pointer;" onclick="toggleLayer(\'{tema}\')">'
-         f'<i class="fa fa-square" style="color:{colormap[tema]};"></i> {tema}</p>' 
+        [f'<p style="margin:4px 0; cursor:pointer; color: #333333; font-size:11px; padding:2px;" onclick="window.toggleLayer(\'{tema}\')">'
+         f'<i class="fa fa-square" style="color:{colormap[tema]}; margin-right:8px;"></i> {tema}</p>' 
          for tema in temas_unicos]))
-
+    
     m.get_root().html.add_child(folium.Element(legend_html))
-
-    # Adicionar JavaScript para controle interativo
+    
+    # Adicionar JavaScript para controle interativo - VERSÃO STREAMLIT COMPATÍVEL
     m.get_root().html.add_child(folium.Element('''
     <script>
-    // Função para alternar camadas individuais
-    function toggleLayer(temaNome) {
-        // Encontrar todos os inputs de controle de camadas
-        const layerInputs = document.querySelectorAll('.leaflet-control-layers input');
+    // Tornar funções globais para acesso pelo Streamlit
+    window.toggleLayer = function(temaNome) {
+        console.log('Tentando alternar tema:', temaNome);
         
-        layerInputs.forEach(input => {
-            // Encontrar o label correspondente
-            const label = input.nextElementSibling;
-            if (label && label.textContent.trim() === temaNome) {
-                input.click(); // Clicar no checkbox
-            }
-        });
-    }
-    
-    // Função para selecionar/desselecionar todas as camadas - CORRIGIDA
-    function toggleAllLayers(select) {
-        const inputs = document.querySelectorAll('.leaflet-control-layers input');
-        inputs.forEach(input => {
-            // Verificar apenas camadas de tema (não inclui base)
-            const labelText = input.nextElementSibling.textContent;
-            if (!labelText.includes('OpenStreetMap') && 
-                !labelText.includes('Camada Municípios') &&
-                !labelText.includes('Camada Município 2')) {
-                if (input.checked !== select) {
+        // Aguardar o Folium carregar completamente
+        setTimeout(function() {
+            const layerControls = document.querySelectorAll('.leaflet-control-layers input');
+            console.log('Inputs encontrados:', layerControls.length);
+            
+            layerControls.forEach(input => {
+                const label = input.nextElementSibling;
+                if (label && label.textContent && label.textContent.trim() === temaNome) {
+                    console.log('Encontrado tema:', temaNome);
                     input.click();
+                    // Forçar atualização visual
+                    const event = new Event('change', { bubbles: true });
+                    input.dispatchEvent(event);
                 }
-            }
-        });
-    }
+            });
+        }, 1000);
+    };
     
-    // Renomear a camada base
+    window.toggleAllLayers = function(select) {
+        console.log('Toggle all layers:', select);
+        
+        setTimeout(function() {
+            const inputs = document.querySelectorAll('.leaflet-control-layers input');
+            console.log('Total inputs:', inputs.length);
+            
+            inputs.forEach(input => {
+                if (input.type === 'checkbox') {
+                    const labelText = input.nextElementSibling ? input.nextElementSibling.textContent : '';
+                    if (labelText && 
+                        !labelText.includes('OpenStreetMap') && 
+                        !labelText.includes('Camada Municípios') &&
+                        !labelText.includes('Camada Município 2')) {
+                        if (input.checked !== select) {
+                            input.click();
+                            // Forçar atualização
+                            const event = new Event('change', { bubbles: true });
+                            input.dispatchEvent(event);
+                        }
+                    }
+                }
+            });
+        }, 1000);
+    };
+    
+    // Função auxiliar para encontrar elementos por texto
+    window.findLayerByText = function(text) {
+        const labels = document.querySelectorAll('.leaflet-control-layers label');
+        for (let label of labels) {
+            if (label.textContent.trim() === text) {
+                const input = label.querySelector('input');
+                if (input) return input;
+            }
+        }
+        return null;
+    };
+    
+    // Inicialização quando o mapa estiver pronto
     document.addEventListener('DOMContentLoaded', function() {
+        console.log('Mapa carregado, inicializando legenda...');
+        
+        // Aguardar o Folium carregar os controles
         setTimeout(function() {
             const baseLayers = document.querySelectorAll('.leaflet-control-layers-base label');
             baseLayers.forEach(layer => {
@@ -259,8 +297,30 @@ def create_identical_map():
                     layer.textContent = 'Controle de Camadas';
                 }
             });
-        }, 1000);
+            
+            console.log('Controles de camadas inicializados');
+        }, 2000);
     });
+    
+    // Alternative approach - usar mutation observer para detectar quando os controles são carregados
+    if (typeof MutationObserver !== 'undefined') {
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+                    const layerControls = document.querySelector('.leaflet-control-layers');
+                    if (layerControls) {
+                        console.log('Controles de camadas detectados via MutationObserver');
+                        observer.disconnect();
+                    }
+                }
+            });
+        });
+        
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
     </script>
     '''))
 
