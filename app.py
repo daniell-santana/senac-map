@@ -237,7 +237,7 @@ def create_identical_map():
             // Verifica se é uma camada de tema (não inclui a base)
             if (!input.parentElement.textContent.includes('OpenStreetMap') && 
                 !input.parentElement.textContent.includes('Camada Municípios') &&
-                !input.parentElement.textContent.includes('Camada Município 2')) {
+                !input.parentElement.textcontent.includes('Camada Município 2')) {
                 if (input.checked !== select) {
                     input.click();
                 }
@@ -264,36 +264,31 @@ def create_identical_map():
 # Interface principal do Streamlit
 def main():
     st.title("🗺️ Mapa Interativo das Unidades SENAC")
-    st.markdown("""
-    **Visualização completa das áreas de atuação e temas predominantes por município**
-    - 🟦 **Camada Municípios**: Temas predominantes por município
-    - 🟨 **Camada Município 2**: Áreas de atuação das unidades
-    - 🔴 **Marcadores**: Localização das unidades SENAC
-    """)
 
     # Criar e exibir o mapa
     with st.spinner('Carregando mapa interativo...'):
         mapa = create_identical_map()
         
-        # Usar st_folium para exibir o mapa com altura personalizada
-        st_folium(mapa, width=1200, height=700, returned_objects=[])
+        # Usar st_folium para exibir o mapa com altura responsiva
+        st_folium(mapa, width=None, height=700, returned_objects=[])
 
-    # Informações adicionais na sidebar
-    st.sidebar.header("ℹ️ Informações")
-    st.sidebar.info("""
-    **Como usar:**
-    - Use os controles no canto superior direito para alternar camadas
-    - Clique nos botões da legenda para filtrar temas
-    - Passe o mouse sobre os municípios para ver informações
-    - Clique nas unidades para ver detalhes
-    """)
-
-    st.sidebar.header("📊 Dados do Mapa")
-    st.sidebar.write("""
-    - Mapa criado com Folium e Streamlit
-    - Dados carregados de arquivos locais
-    - Visualização interativa completa
-    """)
+    # CSS para tornar o mapa responsivo
+    st.markdown("""
+    <style>
+    /* Tornar o mapa responsivo */
+    .stFolium {
+        width: 100% !important;
+        height: 75vh !important;
+    }
+    
+    /* Ajustar para dispositivos móveis */
+    @media (max-width: 768px) {
+        .stFolium {
+            height: 60vh !important;
+        }
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
