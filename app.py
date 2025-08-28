@@ -196,135 +196,260 @@ def create_identical_map():
         collapsed=True,
         autoZIndex=True
     )
+    
+    # Adicionar ao mapa primeiro
     layer_control.add_to(m)
-
-    # 13. Adicionar legenda interativa com botão "Selecionar Todas"
-    legend_html = '''
-    <div style="position: fixed; 
-                bottom: 50px; left: 50px; width: 300px; height: auto;
-                border: 2px solid #cccccc; z-index: 9999; font-size: 12px;
-                background-color: white; overflow-y: auto; max-height: 300px;
-                padding: 10px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-        <p style="margin:0; padding-bottom:8px; color: #333333; font-weight: bold; border-bottom: 1px solid #eeeeee;">
-            Legenda de Temas</p>
-        <button onclick="window.toggleAllLayers(true)" style="margin-bottom:8px; width:100%; padding:6px; 
-                background-color: #f8f9fa; color: #333333; border: 1px solid #dddddd; border-radius:4px; 
-                cursor: pointer; font-size:11px;">Selecionar Todas</button>
-        <button onclick="window.toggleAllLayers(false)" style="margin-bottom:12px; width:100%; padding:6px;
-                background-color: #f8f9fa; color: #333333; border: 1px solid #dddddd; border-radius:4px;
-                cursor: pointer; font-size:11px;">Desselecionar Todas</button>
-        {items}
-    </div>
-    '''.format(items=''.join(
-        [f'<p style="margin:4px 0; cursor:pointer; color: #333333; font-size:11px; padding:2px;" onclick="window.toggleLayer(\'{tema}\')">'
-         f'<i class="fa fa-square" style="color:{colormap[tema]}; margin-right:8px;"></i> {tema}</p>' 
-         for tema in temas_unicos]))
     
-    m.get_root().html.add_child(folium.Element(legend_html))
-    
-    # Adicionar JavaScript para controle interativo - VERSÃO STREAMLIT COMPATÍVEL
+    # JavaScript para renomear a camada base APÓS a renderização
     m.get_root().html.add_child(folium.Element('''
     <script>
-    // Tornar funções globais para acesso pelo Streamlit
-    window.toggleLayer = function(temaNome) {
-        console.log('Tentando alternar tema:', temaNome);
-        
-        // Aguardar o Folium carregar completamente
-        setTimeout(function() {
-            const layerControls = document.querySelectorAll('.leaflet-control-layers input');
-            console.log('Inputs encontrados:', layerControls.length);
-            
-            layerControls.forEach(input => {
-                const label = input.nextElementSibling;
-                if (label && label.textContent && label.textContent.trim() === temaNome) {
-                    console.log('Encontrado tema:', temaNome);
-                    input.click();
-                    // Forçar atualização visual
-                    const event = new Event('change', { bubbles: true });
-                    input.dispatchEvent(event);
-                }
-            });
-        }, 1000);
-    };
-    
-    window.toggleAllLayers = function(select) {
-        console.log('Toggle all layers:', select);
-        
-        setTimeout(function() {
-            const inputs = document.querySelectorAll('.leaflet-control-layers input');
-            console.log('Total inputs:', inputs.length);
-            
-            inputs.forEach(input => {
-                if (input.type === 'checkbox') {
-                    const labelText = input.nextElementSibling ? input.nextElementSibling.textContent : '';
-                    if (labelText && 
-                        !labelText.includes('OpenStreetMap') && 
-                        !labelText.includes('Camada Municípios') &&
-                        !labelText.includes('Camada Município 2')) {
-                        if (input.checked !== select) {
-                            input.click();
-                            // Forçar atualização
-                            const event = new Event('change', { bubbles: true });
-                            input.dispatchEvent(event);
-                        }
-                    }
-                }
-            });
-        }, 1000);
-    };
-    
-    // Função auxiliar para encontrar elementos por texto
-    window.findLayerByText = function(text) {
-        const labels = document.querySelectorAll('.leaflet-control-layers label');
-        for (let label of labels) {
-            if (label.textContent.trim() === text) {
-                const input = label.querySelector('input');
-                if (input) return input;
+    // Função para renomear a camada base
+    function renameBaseLayer() {
+        const baseLabels = document.querySelectorAll('.leaflet-control-layers-base label');
+        baseLabels.forEach(label => {
+            if (label.textContent.includes('cartodbpositron') || 
+                label.textContent.includes('CartoDB') ||
+                label.textContent.includes('OpenStreetMap')) {
+                label.textContent = 'Camadas do mapa';
+                console.log('Camada base renomeada para: Camadas do mapa');
             }
-        }
-        return null;
-    };
+        });
+    }
     
-    // Inicialização quando o mapa estiver pronto
+    // Executar quando o mapa carregar
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('Mapa carregado, inicializando legenda...');
-        
-        // Aguardar o Folium carregar os controles
-        setTimeout(function() {
-            const baseLayers = document.querySelectorAll('.leaflet-control-layers-base label');
-            baseLayers.forEach(layer => {
-                if (layer.textContent.includes('OpenStreetMap')) {
-                    layer.textContent = 'Controle de Camadas';
-                }
-            });
-            
-            console.log('Controles de camadas inicializados');
-        }, 2000);
+        // Múltiplas tentativas para garantir que funcione
+        setTimeout(renameBaseLayer, 1000);
+        setTimeout(renameBaseLayer, 3000);
+        setTimeout(renameBaseLayer, 5000);
     });
     
-    // Alternative approach - usar mutation observer para detectar quando os controles são carregados
+    // Observer para detectar quando os controles são adicionados
     if (typeof MutationObserver !== 'undefined') {
         const observer = new MutationObserver(function(mutations) {
             mutations.forEach(function(mutation) {
-                if (mutation.addedNodes && mutation.addedNodes.length > 0) {
-                    const layerControls = document.querySelector('.leaflet-control-layers');
-                    if (layerControls) {
-                        console.log('Controles de camadas detectados via MutationObserver');
-                        observer.disconnect();
-                    }
+                if (mutation.addedNodes.length > 0) {
+                    renameBaseLayer();
                 }
             });
         });
         
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        observer.observe(document.body, { childList: true, subtree: true });
     }
     </script>
     '''))
 
-    return m
+    # 13. SOLUÇÃO DEFINITIVA - Legenda que funciona no Streamlit
+    # Primeiro: Adicionar IDs únicos a todas as camadas para podermos controlá-las
+    
+    # Adicionar IDs únicos aos FeatureGroups
+    for i, tema in enumerate(temas_unicos):
+        feature_groups[tema].layer_name = f"tema_{i}"
+    
+    # JavaScript robusto para controle das camadas
+    legend_js = '''
+    // Variáveis globais para armazenar referências das camadas
+    window.layerReferences = {};
+    
+    // Função para inicializar as referências das camadas
+    function initializeLayerReferences() {
+        const layersControl = document.querySelector('.leaflet-control-layers');
+        if (!layersControl) {
+            console.log('Camadas não carregadas ainda, tentando novamente...');
+            setTimeout(initializeLayerReferences, 1000);
+            return;
+        }
+        
+        // Mapear nomes das camadas para seus inputs
+        const inputs = layersControl.querySelectorAll('input[type="checkbox"]');
+        inputs.forEach(input => {
+            const label = input.nextElementSibling;
+            if (label && label.textContent) {
+                const layerName = label.textContent.trim();
+                window.layerReferences[layerName] = input;
+                console.log('Camada registrada:', layerName);
+            }
+        });
+        
+        console.log('Todas as camadas inicializadas:', Object.keys(window.layerReferences));
+    }
+    
+    // Função para alternar camada individual - MÉTODO CONFIÁVEL
+    window.toggleLayer = function(layerName) {
+        console.log('Tentando alternar camada:', layerName);
+        
+        if (window.layerReferences[layerName]) {
+            const input = window.layerReferences[layerName];
+            input.click();
+            
+            // Disparar eventos para garantir a atualização
+            const changeEvent = new Event('change', { bubbles: true });
+            input.dispatchEvent(changeEvent);
+            
+            console.log('Camada alternada com sucesso:', layerName);
+            return true;
+        }
+        
+        // Se não encontrou, tentar encontrar novamente
+        console.log('Camada não encontrada, reinicializando referências...');
+        initializeLayerReferences();
+        
+        // Tentar novamente após reinicialização
+        setTimeout(() => {
+            if (window.layerReferences[layerName]) {
+                window.layerReferences[layerName].click();
+                console.log('Camada alternada após reinicialização:', layerName);
+            } else {
+                console.log('Camada ainda não encontrada após reinicialização:', layerName);
+                
+                // Último recurso: procurar em todos os inputs
+                const allInputs = document.querySelectorAll('.leaflet-control-layers input');
+                allInputs.forEach(input => {
+                    const label = input.nextElementSibling;
+                    if (label && label.textContent && label.textContent.trim() === layerName) {
+                        input.click();
+                        console.log('Camada encontrada via busca direta:', layerName);
+                    }
+                });
+            }
+        }, 500);
+        
+        return false;
+    };
+    
+    // Função para selecionar/desselecionar todas as camadas
+    window.toggleAllLayers = function(select) {
+        console.log('Alternando todas as camadas para:', select);
+        
+        // Garantir que as referências estão atualizadas
+        initializeLayerReferences();
+        
+        setTimeout(() => {
+            let changed = 0;
+            for (const [layerName, input] of Object.entries(window.layerReferences)) {
+                if (!layerName.includes('Camadas do mapa') && 
+                    !layerName.includes('Camada Municípios') &&
+                    !layerName.includes('Camada Município 2')) {
+                    if (input.checked !== select) {
+                        input.click();
+                        changed++;
+                    }
+                }
+            }
+            console.log('Camadas alteradas:', changed);
+        }, 300);
+    };
+    
+    // Inicializar quando o DOM estiver pronto
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM carregado, iniciando inicialização das camadas...');
+        
+        // Múltiplas tentativas de inicialização
+        initializeLayerReferences();
+        setTimeout(initializeLayerReferences, 1500);
+        setTimeout(initializeLayerReferences, 3000);
+        
+        // Renomear a camada base
+        function renameBaseLayer() {
+            const baseLabels = document.querySelectorAll('.leaflet-control-layers-base label');
+            baseLabels.forEach(label => {
+                if (label.textContent.includes('cartodbpositron') || 
+                    label.textContent.includes('CartoDB') ||
+                    label.textContent.includes('OpenStreetMap')) {
+                    label.textContent = 'Camadas do mapa';
+                }
+            });
+        }
+        
+        setTimeout(renameBaseLayer, 1000);
+        setTimeout(renameBaseLayer, 2500);
+    });
+    
+    // Mutation Observer para detectar mudanças dinâmicas
+    if (typeof MutationObserver !== 'undefined') {
+        const observer = new MutationObserver(function(mutations) {
+            let shouldReinitialize = false;
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes.length > 0) {
+                    shouldReinitialize = true;
+                }
+            });
+            
+            if (shouldReinitialize) {
+                initializeLayerReferences();
+                renameBaseLayer();
+            }
+        });
+        
+        observer.observe(document.body, { 
+            childList: true, 
+            subtree: true,
+            attributes: false,
+            characterData: false
+        });
+    }
+    
+    // Função de fallback - busca direta por camada
+    window.findLayerDirectly = function(layerName) {
+        const inputs = document.querySelectorAll('.leaflet-control-layers input');
+        for (const input of inputs) {
+            const label = input.nextElementSibling;
+            if (label && label.textContent && label.textContent.trim() === layerName) {
+                return input;
+            }
+        }
+        return null;
+    };
+    '''
+    
+    # Adicionar o JavaScript robusto ao mapa
+    m.get_root().html.add_child(folium.Element(f'<script>{legend_js}</script>'))
+    
+    # Agora criar a legenda HTML
+    legend_html = '''
+    <div style="position: fixed; 
+                bottom: 50px; left: 50px; width: 320px; height: auto;
+                border: 2px solid #d0d0d0; z-index: 9999; font-size: 12px;
+                background-color: rgba(255, 255, 255, 0.98); overflow-y: auto; 
+                max-height: 400px; padding: 15px; border-radius: 10px; 
+                box-shadow: 0 6px 20px rgba(0,0,0,0.15); backdrop-filter: blur(5px);">
+        <p style="margin:0; padding-bottom:12px; color: #2c3e50; font-weight: bold; 
+                  font-size: 14px; border-bottom: 2px solid #ecf0f1;">
+            🎨 Legenda de Temas</p>
+        <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+            <button onclick="window.toggleAllLayers(true)" 
+                    style="flex: 1; padding: 8px; background: linear-gradient(to bottom, #27ae60, #229954); 
+                           color: white; border: none; border-radius: 6px; cursor: pointer; 
+                           font-weight: 500; font-size: 11px; transition: all 0.2s;"
+                    onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 12px rgba(39, 174, 96, 0.3)';"
+                    onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';">
+                ✅ Selecionar Todas
+            </button>
+            <button onclick="window.toggleAllLayers(false)" 
+                    style="flex: 1; padding: 8px; background: linear-gradient(to bottom, #e74c3c, #c0392b); 
+                           color: white; border: none; border-radius: 6px; cursor: pointer; 
+                           font-weight: 500; font-size: 11px; transition: all 0.2s;"
+                    onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 12px rgba(231, 76, 60, 0.3)';"
+                    onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';">
+                ❌ Desselecionar
+            </button>
+        </div>
+        <div style="max-height: 300px; overflow-y: auto; padding-right: 5px;">
+            {items}
+        </div>
+    </div>
+    '''.format(items=''.join(
+        [f'<div style="display: flex; align-items: center; padding: 6px; margin: 4px 0; \
+                    border-radius: 5px; cursor: pointer; transition: background 0.2s;" \
+                    onmouseover="this.style.background=\'#f8f9fa\';" \
+                    onmouseout="this.style.background=\'transparent\';" \
+                    onclick="window.toggleLayer(\'{tema}\');">'
+         f'<i class="fa fa-square" style="color:{colormap[tema]}; font-size: 16px; margin-right: 10px;"></i>'
+         f'<span style="color: #34495e; font-size: 12px; font-weight: 500;">{tema}</span>'
+         f'</div>' 
+         for tema in temas_unicos]))
+    
+    m.get_root().html.add_child(folium.Element(legend_html))
 
 # Interface principal do Streamlit
 def main():
