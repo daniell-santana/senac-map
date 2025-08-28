@@ -9,7 +9,7 @@ from streamlit_folium import st_folium
 from shapely.ops import unary_union
 from shapely.validation import make_valid
 
-# Configuração da página
+# Configuração da página do Streamlit
 st.set_page_config(
     page_title="Mapa Interativo SENAC",
     page_icon="🗺️",
@@ -17,169 +17,283 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Título do aplicativo
-st.title("🗺️ Mapa Interativo das Unidades SENAC")
-st.markdown("Visualização das áreas de atuação e temas predominantes por município")
+# Função para criar o mapa idêntico ao seu script
+def create_identical_map():
+    # 1. Carregar os dados
+    excel_file = "Temas_Unidades.xlsx"
+    unidades_temas = pd.read_excel(excel_file, sheet_name="Unidades x Temas")
+    municipios_atuacao = pd.read_excel(excel_file, sheet_name="Municípios - Área de Atuação")
 
-# Função principal
-def main():
-    try:
-        # 1. Carregar os dados
-        excel_file = "Temas_Unidades.xlsx"
-        unidades_temas = pd.read_excel(excel_file, sheet_name="Unidades x Temas")
-        municipios_atuacao = pd.read_excel(excel_file, sheet_name="Municípios - Área de Atuação")
+    # 2. Processar os temas
+    unidades_temas['Temas'] = unidades_temas['Temas'].str.split(r',\s*')
+    temas_expandidos = unidades_temas.explode('Temas').dropna(subset=['Temas'])
+    temas_expandidos['Temas'] = temas_expandidos['Temas'].str.strip()
 
-        # 2. Processar os temas
-        unidades_temas['Temas'] = unidades_temas['Temas'].str.split(r',\s*')
-        temas_expandidos = unidades_temas.explode('Temas').dropna(subset=['Temas'])
-        temas_expandidos['Temas'] = temas_expandidos['Temas'].str.strip()
+    # 3. Relacionar municípios com unidades e temas
+    municipio_para_unidade = municipios_atuacao.set_index('MUNICÍPIOS')['AREA DE ATUAÇÃO OPERACIONAL SENAC SP'].to_dict()
 
-        # 3. Relacionar municípios com unidades e temas
-        municipio_para_unidade = municipios_atuacao.set_index('MUNICÍPIOS')['AREA DE ATUAÇÃO OPERACIONAL SENAC SP'].to_dict()
+    # Criar dicionário de municípios por unidade
+    unidade_para_municipios = {}
+    for municipio, unidade in municipio_para_unidade.items():
+        if pd.notna(unidade):
+            if unidade not in unidade_para_municipios:
+                unidade_para_municipios[unidade] = []
+            unidade_para_municipios[unidade].append(municipio)
 
-        # Criar dicionário de municípios por unidade
-        unidade_para_municipios = {}
-        for municipio, unidade in municipio_para_unidade.items():
-            if pd.notna(unidade):
-                if unidade not in unidade_para_municipios:
-                    unidade_para_municipios[unidade] = []
-                unidade_para_municipios[unidade].append(municipio)
+    temas_por_municipio = {}
+    for municipio, unidade in municipio_para_unidade.items():
+        if pd.notna(unidade):
+            temas = temas_expandidos[temas_expandidos['UNIDADE/GERÊNCIA'] == unidade]['Temas'].tolist()
+            if temas:
+                temas_por_municipio[municipio] = temas
 
-        temas_por_municipio = {}
-        for municipio, unidade in municipio_para_unidade.items():
-            if pd.notna(unidade):
-                temas = temas_expandidos[temas_expandidos['UNIDADE/GERÊNCIA'] == unidade]['Temas'].tolist()
-                if temas:
-                    temas_por_municipio[municipio] = temas
+    # 4. Determinar o tema predominante
+    tema_predominante = {m: Counter(t).most_common(1)[0][0] for m, t in temas_por_municipio.items()}
 
-        # 4. Determinar o tema predominante
-        tema_predominante = {m: Counter(t).most_common(1)[0][0] for m, t in temas_por_municipio.items()}
+    # 5. Carregar o GeoJSON
+    with open('geojs-35-mun.json', 'r', encoding='utf-8') as f:
+        geojson = json.load(f)
 
-        # 5. Carregar o GeoJSON
-        with open('geojs-35-mun.json', 'r', encoding='utf-8') as f:
-            geojson_data = json.load(f)
+    # 6. Converter para GeoDataFrame e definir CRS
+    gdf = gpd.GeoDataFrame.from_features(geojson['features'])
+    gdf.crs = "EPSG:4326"
 
-        # 6. Converter para GeoDataFrame e definir CRS
-        gdf = gpd.GeoDataFrame.from_features(geojson_data['features'])
-        gdf.crs = "EPSG:4326"
+    # 7. Mapear os temas predominantes
+    gdf['tema_predominante'] = gdf['name'].map(tema_predominante)
 
-        # 7. Mapear os temas predominantes
-        gdf['tema_predominante'] = gdf['name'].map(tema_predominante)
+    # 8. Criar mapa interativo com Folium usando o tema Positron do OpenStreetMap
+    m = folium.Map(location=[-22, -48], zoom_start=7, tiles='CartoDB positron')
 
-        # Criar colormap
-        temas_unicos = sorted(temas_expandidos['Temas'].unique())
-        colors = plt.cm.tab20(range(len(temas_unicos)))
-        colormap = {t: '#%02x%02x%02x' % tuple(int(x*255) for x in colors[i][:3]) for i, t in enumerate(temas_unicos)}
+    # Criar colormap
+    temas_unicos = sorted(temas_expandidos['Temas'].unique())
+    colors = plt.cm.tab20(range(len(temas_unicos)))
+    colormap = {t: '#%02x%02x%02x' % tuple(int(x*255) for x in colors[i][:3]) for i, t in enumerate(temas_unicos)}
 
-        # 8. Criar mapa interativo
-        m = folium.Map(location=[-22, -48], zoom_start=7, tiles='CartoDB positron')
+    # 9. Adicionar municípios ao mapa
+    if gdf.crs != "EPSG:4326":
+        gdf = gdf.to_crs("EPSG:4326")
 
-        # 9. Adicionar municípios ao mapa
-        folium.GeoJson(
-            gdf,
-            style_function=lambda feature: {
-                'fillColor': colormap.get(feature['properties'].get('tema_predominante', 'lightgray')), 
-                'color': 'black',
-                'weight': 0.5,
-                'fillOpacity': 0.7
-            },
-            tooltip=folium.features.GeoJsonTooltip(
-                fields=['name', 'tema_predominante'],
-                aliases=['Município:', 'Tema predominante:'],
-                localize=True
-            )
-        ).add_to(m)
+    # Criar um FeatureGroup para os municípios com nome amigável (inicialmente escondido)
+    municipios_layer = folium.FeatureGroup(name='Camada Municípios', show=False)
+    folium.GeoJson(
+        gdf,
+        style_function=lambda feature: {
+            'fillColor': colormap.get(feature['properties'].get('tema_predominante', 'lightgray')), 
+            'color': 'black',
+            'weight': 0.5,
+            'fillOpacity': 0.7
+        },
+        tooltip=folium.features.GeoJsonTooltip(
+            fields=['name', 'tema_predominante'],
+            aliases=['Município:', 'Tema predominante:'],
+            localize=True
+        )
+    ).add_to(municipios_layer)
+    municipios_layer.add_to(m)
 
-        # 10. Criar camada Município 2 (bordas)
-        gdf_projected = gdf.to_crs(epsg=3857)
+    # 10. Criar a nova camada "Camada Município 2" com os contornos das áreas de atuação
+    gdf_projected = gdf.to_crs(epsg=3857)
 
-        areas_atuacao_geometrias = {}
-        for unidade, municipios in unidade_para_municipios.items():
-            municipios_unidade = gdf_projected[gdf_projected['name'].isin(municipios)]
-            
-            if not municipios_unidade.empty:
-                try:
-                    geometrias_validas = [make_valid(geom) for geom in municipios_unidade.geometry]
-                    geometria_unida = unary_union(geometrias_validas)
-                    
-                    if geometria_unida.is_empty:
-                        geometria_unida = geometrias_validas[0].convex_hull
-                        for geom in geometrias_validas[1:]:
-                            geometria_unida = geometria_unida.union(geom.convex_hull)
-                    
-                    areas_atuacao_geometrias[unidade] = geometria_unida
-                    
-                except Exception as e:
-                    st.warning(f"Erro ao processar unidade {unidade}: {e}")
-                    bbox = municipios_unidade.total_bounds
-                    from shapely.geometry import box
-                    areas_atuacao_geometrias[unidade] = box(bbox[0], bbox[1], bbox[2], bbox[3])
+    # Criar polígonos unidos para cada área de atuação
+    areas_atuacao_geometrias = {}
 
-        # Criar buffer e borda
-        bordas_atuacao = []
-        for unidade, geometria in areas_atuacao_geometrias.items():
+    for unidade, municipios in unidade_para_municipios.items():
+        # Filtrar municípios desta unidade
+        municipios_unidade = gdf_projected[gdf_projected['name'].isin(municipios)]
+        
+        if not municipios_unidade.empty:
             try:
-                buffer_distance = 1000
-                geometria_buffer = geometria.buffer(buffer_distance)
-                borda = geometria_buffer.difference(geometria)
+                # Corrigir geometrias inválidas primeiro
+                geometrias_validas = [make_valid(geom) for geom in municipios_unidade.geometry]
                 
-                if borda.is_empty:
-                    borda = geometria_buffer
-                    
-                bordas_atuacao.append({
-                    'unidade': unidade,
-                    'geometry': borda
-                })
+                # Unir todos os polígonos dos municípios desta unidade
+                geometria_unida = unary_union(geometrias_validas)
+                
+                # Se a união falhar, usar convex hull como fallback
+                if geometria_unida.is_empty:
+                    geometria_unida = geometrias_validas[0].convex_hull
+                    for geom in geometrias_validas[1:]:
+                        geometria_unida = geometria_unida.union(geom.convex_hull)
+                
+                areas_atuacao_geometrias[unidade] = geometria_unida
                 
             except Exception as e:
-                st.warning(f"Erro ao criar borda para {unidade}: {e}")
-                continue
+                print(f"Erro ao processar unidade {unidade}: {e}")
+                # Fallback: usar o bounding box dos municípios
+                bbox = municipios_unidade.total_bounds
+                from shapely.geometry import box
+                areas_atuacao_geometrias[unidade] = box(bbox[0], bbox[1], bbox[2], bbox[3])
 
-        if bordas_atuacao:
-            gdf_bordas = gpd.GeoDataFrame(bordas_atuacao, crs=gdf_projected.crs)
-            gdf_bordas = gdf_bordas.to_crs(epsg=4326)
+    # Criar buffer e borda para cada área de atuação
+    bordas_atuacao = []
 
-            folium.GeoJson(
-                gdf_bordas,
-                style_function=lambda feature: {
-                    'fillColor': '#808080',
-                    'color': '#606060',
-                    'weight': 1,
-                    'fillOpacity': 0.2
-                }
-            ).add_to(m)
-
-        # 11. Adicionar marcadores
-        for idx, row in unidades_temas.iterrows():
-            if not pd.isna(row['LATITUDE']) and not pd.isna(row['LONGITUDE']):
-                temas_unidade = set([t.strip() for t in row['Temas'] if pd.notna(t)])
+    for unidade, geometria in areas_atuacao_geometrias.items():
+        try:
+            # Criar buffer ao redor da área unida
+            buffer_distance = 1000
+            geometria_buffer = geometria.buffer(buffer_distance)
+            
+            # Subtrair a área original para obter apenas a borda
+            borda = geometria_buffer.difference(geometria)
+            
+            # Se a diferença falhar, usar apenas o buffer
+            if borda.is_empty:
+                borda = geometria_buffer
                 
-                folium.Marker(
-                    location=[row['LATITUDE'], row['LONGITUDE']],
-                    popup=f"<b>{row['UNIDADE/GERÊNCIA']}</b><br>Temas: {', '.join(temas_unidade)}",
-                    tooltip=row['SIGLA'],
-                    icon=folium.Icon(color='red', icon='info-sign')
-                ).add_to(m)
+            bordas_atuacao.append({
+                'unidade': unidade,
+                'geometry': borda
+            })
+            
+        except Exception as e:
+            print(f"Erro ao criar borda para {unidade}: {e}")
+            continue
 
-        # Exibir mapa
-        st_folium(m, width=1200, height=700)
+    # Criar GeoDataFrame com as bordas
+    if bordas_atuacao:
+        gdf_bordas = gpd.GeoDataFrame(bordas_atuacao, crs=gdf_projected.crs)
+        gdf_bordas = gdf_bordas.to_crs(epsg=4326)
 
-        # Sidebar com informações
-        st.sidebar.header("📊 Estatísticas")
-        st.sidebar.write(f"**Unidades:** {len(unidades_temas)}")
-        st.sidebar.write(f"**Municípios com atuação:** {len(temas_por_municipio)}")
-        st.sidebar.write(f"**Temas diferentes:** {len(temas_unicos)}")
+        # Adicionar a camada de borda ao mapa (INICIALMENTE VISÍVEL) - SEM TOOLTIP
+        municipios_border_layer = folium.FeatureGroup(name='Camada Município 2', show=True)
+        folium.GeoJson(
+            gdf_bordas,
+            style_function=lambda feature: {
+                'fillColor': '#808080',
+                'color': '#606060',
+                'weight': 1,
+                'fillOpacity': 0.2
+            }
+        ).add_to(municipios_border_layer)
+        municipios_border_layer.add_to(m)
 
-        st.sidebar.header("🎨 Legenda")
-        for tema, cor in colormap.items():
-            st.sidebar.markdown(
-                f"<span style='display: inline-block; width: 20px; height: 20px; background: {cor}; margin-right: 10px; border: 1px solid #000;'></span> **{tema}**",
-                unsafe_allow_html=True
-            )
+    # 11. Criar FeatureGroups para cada tema (TODOS INICIALMENTE VISÍVEIS)
+    feature_groups = {}
+    for tema in temas_unicos:
+        feature_groups[tema] = folium.FeatureGroup(name=tema, show=True)
 
-    except Exception as e:
-        st.error(f"❌ Erro ao carregar o mapa: {str(e)}")
-        st.info("ℹ️ Verifique se os arquivos estão na pasta correta")
+    # Adicionar marcadores das unidades SENAC aos respectivos FeatureGroups
+    for idx, row in unidades_temas.iterrows():
+        if not pd.isna(row['LATITUDE']) and not pd.isna(row['LONGITUDE']):
+            temas_unidade = set([t.strip() for t in row['Temas'] if pd.notna(t)])
+            
+            for tema in temas_unidade:
+                if tema in feature_groups:
+                    folium.Marker(
+                        location=[row['LATITUDE'], row['LONGITUDE']],
+                        popup=f"<b>{row['UNIDADE/GERÊNCIA']}</b><br>Temas: {', '.join(temas_unidade)}",
+                        tooltip=row['SIGLA'],
+                        icon=folium.Icon(color='red', icon='info-sign')
+                    ).add_to(feature_groups[tema])
+
+    # Adicionar todos os FeatureGroups ao mapa
+    for group in feature_groups.values():
+        group.add_to(m)
+
+    # 12. Adicionar controle de camadas personalizado
+    layer_control = folium.LayerControl(
+        position='topright',
+        collapsed=True,
+        autoZIndex=True
+    )
+    layer_control.add_to(m)
+
+    # 13. Adicionar legenda interativa com botão "Selecionar Todas"
+    legend_html = '''
+    <div style="position: fixed; 
+                bottom: 50px; left: 50px; width: 300px; height: auto;
+                border:2px solid grey; z-index:9999; font-size:12px;
+                background-color:white; overflow-y: auto; max-height: 300px;
+                padding: 10px;">
+        <p style="margin:0; padding-bottom:5px;"><strong>Legenda de Temas</strong></p>
+        <button onclick="toggleAllLayers(true)" style="margin-bottom:5px; width:100%;">Selecionar Todas</button>
+        <button onclick="toggleAllLayers(false)" style="margin-bottom:5px; width:100%;">Desselecionar Todas</button>
+        {items}
+    </div>
+    '''.format(items=''.join(
+        [f'<p style="margin:2px; cursor:pointer;" onclick="toggleLayer(\'{tema}\')">'
+         f'<i class="fa fa-square" style="color:{colormap[tema]};"></i> {tema}</p>' 
+         for tema in temas_unicos]))
+
+    m.get_root().html.add_child(folium.Element(legend_html))
+
+    # Adicionar JavaScript para controle interativo
+    m.get_root().html.add_child(folium.Element('''
+    <script>
+    // Função para alternar camadas individuals
+    function toggleLayer(tema) {
+        const inputs = document.querySelectorAll('.leaflet-control-layers-list input');
+        inputs.forEach(input => {
+            if (input.nextSibling.textContent.trim() === tema) {
+                input.click();
+            }
+        });
+    }
+
+    // Função para selecionar/desselecionar todas as camadas
+    function toggleAllLayers(select) {
+        const inputs = document.querySelectorAll('.leaflet-control-layers-list input');
+        inputs.forEach(input => {
+            // Verifica se é uma camada de tema (não inclui a base)
+            if (!input.parentElement.textContent.includes('OpenStreetMap') && 
+                !input.parentElement.textContent.includes('Camada Municípios') &&
+                !input.parentElement.textContent.includes('Camada Município 2')) {
+                if (input.checked !== select) {
+                    input.click();
+                }
+            }
+        });
+    }
+
+    // Renomear a camada base
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+            const baseLayers = document.querySelectorAll('.leaflet-control-layers-base label');
+            baseLayers.forEach(layer => {
+                if (layer.textContent.includes('OpenStreetMap')) {
+                    layer.textContent = 'Controle de Camadas';
+                }
+            });
+        }, 500);
+    });
+    </script>
+    '''))
+
+    return m
+
+# Interface principal do Streamlit
+def main():
+    st.title("🗺️ Mapa Interativo das Unidades SENAC")
+    st.markdown("""
+    **Visualização completa das áreas de atuação e temas predominantes por município**
+    - 🟦 **Camada Municípios**: Temas predominantes por município
+    - 🟨 **Camada Município 2**: Áreas de atuação das unidades
+    - 🔴 **Marcadores**: Localização das unidades SENAC
+    """)
+
+    # Criar e exibir o mapa
+    with st.spinner('Carregando mapa interativo...'):
+        mapa = create_identical_map()
+        
+        # Usar st_folium para exibir o mapa com altura personalizada
+        st_folium(mapa, width=1200, height=700, returned_objects=[])
+
+    # Informações adicionais na sidebar
+    st.sidebar.header("ℹ️ Informações")
+    st.sidebar.info("""
+    **Como usar:**
+    - Use os controles no canto superior direito para alternar camadas
+    - Clique nos botões da legenda para filtrar temas
+    - Passe o mouse sobre os municípios para ver informações
+    - Clique nas unidades para ver detalhes
+    """)
+
+    st.sidebar.header("📊 Dados do Mapa")
+    st.sidebar.write("""
+    - Mapa criado com Folium e Streamlit
+    - Dados carregados de arquivos locais
+    - Visualização interativa completa
+    """)
 
 if __name__ == "__main__":
     main()
